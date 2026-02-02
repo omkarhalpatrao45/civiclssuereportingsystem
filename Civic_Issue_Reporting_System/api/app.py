@@ -5,23 +5,32 @@ import os
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
-# ---------------- CONFIG ----------------
+# ---------------- PATH CONFIG ----------------
 
-app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+
+# ---------------- APP CONFIG ----------------
+
+app = Flask(
+    __name__,
+    template_folder=TEMPLATES_DIR,
+    static_folder=STATIC_DIR
+)
 CORS(app)
 
 app.secret_key = "your_secret_key_here"
 
-# Vercel allows write access ONLY to /tmp
-BASE_DIR = "/tmp"
-
-UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
-DATABASE = os.path.join(BASE_DIR, "database.db")
+# Vercel allows writing ONLY inside /tmp
+TMP_DIR = "/tmp"
+UPLOAD_FOLDER = os.path.join(TMP_DIR, "uploads")
+DATABASE = os.path.join(TMP_DIR, "database.db")
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"png", "jpg", "jpeg", "gif"}
 
-# Ensure folders exist (allowed in /tmp)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # ---------------- DATABASE ----------------
@@ -85,13 +94,13 @@ def register():
             conn = get_db_connection()
             conn.execute(
                 "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
-                (name, email, password),
+                (name, email, password)
             )
             conn.commit()
-            flash("Registration successful", "success")
+            flash("Registration successful! Please login.", "success")
             return redirect(url_for("login"))
         except sqlite3.IntegrityError:
-            flash("Email already exists", "error")
+            flash("Email already exists.", "error")
         finally:
             conn.close()
 
@@ -105,7 +114,7 @@ def login():
 
         conn = get_db_connection()
         user = conn.execute(
-            "SELECT * FROM users WHERE email=?", (email,)
+            "SELECT * FROM users WHERE email = ?", (email,)
         ).fetchone()
         conn.close()
 
@@ -114,7 +123,7 @@ def login():
             session["role"] = user["role"]
             return redirect(url_for("dashboard"))
 
-        flash("Invalid credentials", "error")
+        flash("Invalid credentials.", "error")
 
     return render_template("login.html")
 
@@ -125,8 +134,7 @@ def dashboard():
 
     conn = get_db_connection()
     issues = conn.execute(
-        "SELECT * FROM issues WHERE user_id=?",
-        (session["user_id"],),
+        "SELECT * FROM issues WHERE user_id = ?", (session["user_id"],)
     ).fetchall()
     conn.close()
 
@@ -152,13 +160,16 @@ def report():
 
         conn = get_db_connection()
         conn.execute(
-            """INSERT INTO issues (title, description, photo_path, location, user_id)
-               VALUES (?, ?, ?, ?, ?)""",
-            (title, description, photo_path, location, session["user_id"]),
+            """
+            INSERT INTO issues (title, description, photo_path, location, user_id)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (title, description, photo_path, location, session["user_id"])
         )
         conn.commit()
         conn.close()
 
+        flash("Issue reported successfully!", "success")
         return redirect(url_for("dashboard"))
 
     return render_template("report.html")
